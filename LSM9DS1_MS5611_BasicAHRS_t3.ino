@@ -31,8 +31,7 @@
  We have disabled the internal pull-ups used by the Wire library in the Wire.h/twi.c utility file.
  We are also using the 400 kHz fast I2C mode by setting the TWI_FREQ  to 400000L /twi.h utility file.
  */
-//#include "Wire.h"
-#include <i2c_t3.h>
+#include "Wire.h"   
 #include <SPI.h>
 //#include <Adafruit_GFX.h>
 //#include <Adafruit_PCD8544.h>
@@ -44,6 +43,14 @@
 // pin 3 - LCD chip select (SCE)
 // pin 4 - LCD reset (RST)
 //Adafruit_PCD8544 display = Adafruit_PCD8544(7, 6, 5, 3, 4);
+
+// how often to update the LCD?
+#define UPDATE_MS 50
+
+// compatibility for non-teensy boards
+#ifndef I2C_NOSTOP
+  #define I2C_NOSTOP false
+#endif
 
 // See MS5611-02BA03 Low Voltage Barometric Pressure Sensor Data Sheet
 #define MS5611_RESET      0x1E
@@ -282,10 +289,11 @@ float eInt[3] = {0.0f, 0.0f, 0.0f};       // vector to hold integral error for M
 
 void setup()
 {
-//  Wire.begin();
+  
+  Wire1.begin();
 //  TWBR = 12;  // 400 kbit/sec I2C speed for Pro Mini
   // Setup for Master mode, pins 16/17, external pullups, 400kHz for Teensy 3.1
-  Wire.begin(I2C_MASTER, 0x00, I2C_PINS_16_17, I2C_PULLUP_EXT, I2C_RATE_400);
+  // Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_16_17, I2C_PULLUP_EXT, I2C_RATE_400);
   delay(4000);
   Serial.begin(38400);
 
@@ -338,26 +346,26 @@ void setup()
     getAres();
     getGres();
     getMres();
-    Serial.print("accel sensitivity is "); Serial.print(1. / (1000.*aRes)); Serial.println(" LSB/mg");
-    Serial.print("gyro sensitivity is "); Serial.print(1. / (1000.*gRes)); Serial.println(" LSB/mdps");
-    Serial.print("mag sensitivity is "); Serial.print(1. / (1000.*mRes)); Serial.println(" LSB/mGauss");
+    Serial.print("accel sensitivity is "); Serial.print(1./(1000.*aRes)); Serial.println(" LSB/mg");
+    Serial.print("gyro sensitivity is "); Serial.print(1./(1000.*gRes)); Serial.println(" LSB/mdps");
+    Serial.print("mag sensitivity is "); Serial.print(1./(1000.*mRes)); Serial.println(" LSB/mGauss");
 
     Serial.println("Perform gyro and accel self test");
     selftestLSM9DS1(); // check function of gyro and accelerometer via self test
-
+   
     Serial.println(" Calibrate gyro and accel");
     accelgyrocalLSM9DS1(gyroBias, accelBias); // Calibrate gyro and accelerometers, load biases in bias registers
     Serial.println("accel biases (mg)"); Serial.println(1000.*accelBias[0]); Serial.println(1000.*accelBias[1]); Serial.println(1000.*accelBias[2]);
     Serial.println("gyro biases (dps)"); Serial.println(gyroBias[0]); Serial.println(gyroBias[1]); Serial.println(gyroBias[2]);
-
+ 
     magcalLSM9DS1(magBias);
-    Serial.println("mag biases (mG)"); Serial.println(1000.*magBias[0]); Serial.println(1000.*magBias[1]); Serial.println(1000.*magBias[2]);
+    Serial.println("mag biases (mG)"); Serial.println(1000.*magBias[0]); Serial.println(1000.*magBias[1]); Serial.println(1000.*magBias[2]); 
     delay(2000); // add delay to see results before serial spew of data
-
-    initLSM9DS1();
+   
+    initLSM9DS1(); 
     Serial.println("LSM9DS1 initialized for active data mode...."); // Initialize device for active mode read of acclerometer, gyroscope, and temperature
 
-    /* display.clearDisplay();
+ /* display.clearDisplay();
 
     display.setCursor(0, 0); display.print("LSM9DS1bias");
     display.setCursor(0, 8); display.print(" x   y   z  ");
@@ -375,7 +383,7 @@ void setup()
     display.display();
     delay(1000);
     */
-// Reset the MS5611 pressure sensor
+    // Reset the MS5611 pressure sensor
     MS5611Reset();
     delay(100);
     Serial.println("MS5611 pressure sensor reset...");
@@ -461,8 +469,7 @@ void loop()
 
   // Serial print and/or display at 0.5 s rate independent of data rates
   delt_t = millis() - count;
-  if (delt_t > 500) { // update LCD once per half-second independent of read rate
-
+  if (delt_t > UPDATE_MS) { // update LCD once per half-second independent of read rate
     if (SerialDebug) {
       Serial.print("ax = "); Serial.print((int)1000 * ax);
       Serial.print(" ay = "); Serial.print((int)1000 * ay);
@@ -510,8 +517,8 @@ void loop()
       OFFSET2 = OFFSET2 + 7 * (100 * Temperature + 1500) * (100 * Temperature + 1500);
       SENS2 = SENS2 + 11 * (100 * Temperature + 1500) * (100 * Temperature + 1500) / 2;
     }
-// End of second order corrections
-//
+    // End of second order corrections
+    //
     Temperature = Temperature - T2 / 100;
     OFFSET = OFFSET - OFFSET2;
     SENS = SENS - SENS2;
@@ -541,7 +548,8 @@ void loop()
     roll  = atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
     pitch *= 180.0f / PI;
     yaw   *= 180.0f / PI;
-    yaw   -= 13.8f; // Declination at Danville, California is 13 degrees 48 minutes and 47 seconds on 2014-04-04
+    yaw   += 19.85f; // Auckland: 19º51min 2019-16
+    //-13.8f; // Declination at Danville, California is 13 degrees 48 minutes and 47 seconds on 2014-04-04
     roll  *= 180.0f / PI;
 
     if (SerialDebug) {
@@ -602,7 +610,6 @@ void loop()
     sumCount = 0;
     sum = 0;
   }
-
 }
 
 //===================================================================================================================
@@ -910,22 +917,22 @@ void magcalLSM9DS1(float * dest1)
 
 void MS5611Reset()
 {
-  Wire.beginTransmission(MS5611_ADDRESS);  // Initialize the Tx buffer
-  Wire.write(MS5611_RESET);                // Put reset command in Tx buffer
-  Wire.endTransmission();                  // Send the Tx buffer
+  Wire1.beginTransmission(MS5611_ADDRESS);  // Initialize the Tx buffer
+  Wire1.write(MS5611_RESET);                // Put reset command in Tx buffer
+  Wire1.endTransmission();                  // Send the Tx buffer
 }
 
 void MS5611PromRead(uint16_t * destination)
 {
   uint8_t data[2] = {0, 0};
   for (uint8_t ii = 0; ii < 8; ii++) {
-    Wire.beginTransmission(MS5611_ADDRESS);  // Initialize the Tx buffer
-    Wire.write(0xA0 | ii << 1);              // Put PROM address in Tx buffer
-    Wire.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
+    Wire1.beginTransmission(MS5611_ADDRESS);  // Initialize the Tx buffer
+    Wire1.write(0xA0 | ii << 1);              // Put PROM address in Tx buffer
+    Wire1.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
     uint8_t i = 0;
-    Wire.requestFrom(MS5611_ADDRESS, 2);   // Read two bytes from slave PROM address
-    while (Wire.available()) {
-      data[i++] = Wire.read();
+    Wire1.requestFrom(MS5611_ADDRESS, 2);   // Read two bytes from slave PROM address
+    while (Wire1.available()) {
+      data[i++] = Wire1.read();
     }               // Put read results in the Rx buffer
     destination[ii] = (uint16_t) (((uint16_t) data[0] << 8) | data[1]); // construct PROM data for return to main program
   }
@@ -934,9 +941,9 @@ void MS5611PromRead(uint16_t * destination)
 uint32_t MS5611Read(uint8_t CMD, uint8_t OSR)  // temperature data read
 {
   uint8_t data[3] = {0, 0, 0};
-  Wire.beginTransmission(MS5611_ADDRESS);  // Initialize the Tx buffer
-  Wire.write(CMD | OSR);                  // Put pressure conversion command in Tx buffer
-  Wire.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
+  Wire1.beginTransmission(MS5611_ADDRESS);  // Initialize the Tx buffer
+  Wire1.write(CMD | OSR);                  // Put pressure conversion command in Tx buffer
+  Wire1.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
 
   switch (OSR)
   {
@@ -947,18 +954,16 @@ uint32_t MS5611Read(uint8_t CMD, uint8_t OSR)  // temperature data read
   case ADC_4096: delay(10); break;
   }
 
-  Wire.beginTransmission(MS5611_ADDRESS);  // Initialize the Tx buffer
-  Wire.write(0x00);                        // Put ADC read command in Tx buffer
-  Wire.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
+  Wire1.beginTransmission(MS5611_ADDRESS);  // Initialize the Tx buffer
+  Wire1.write(0x00);                        // Put ADC read command in Tx buffer
+  Wire1.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
   uint8_t i = 0;
-  Wire.requestFrom(MS5611_ADDRESS, 3);     // Read three bytes from slave PROM address
-  while (Wire.available()) {
-    data[i++] = Wire.read();
+  Wire1.requestFrom(MS5611_ADDRESS, 3);     // Read three bytes from slave PROM address
+  while (Wire1.available()) {
+    data[i++] = Wire1.read();
   }               // Put read results in the Rx buffer
   return (uint32_t) (((uint32_t) data[0] << 16) | (uint32_t) data[1] << 8 | data[2]); // construct PROM data for return to main program
 }
-
-
 
 unsigned char MS5611checkCRC(uint16_t * n_prom)  // calculate checksum from PROM register contents
 {
@@ -995,36 +1000,35 @@ unsigned char MS5611checkCRC(uint16_t * n_prom)  // calculate checksum from PROM
 
 void writeByte(uint8_t address, uint8_t subAddress, uint8_t data)
 {
-  Wire.beginTransmission(address);  // Initialize the Tx buffer
-  Wire.write(subAddress);           // Put slave register address in Tx buffer
-  Wire.write(data);                 // Put data in Tx buffer
-  Wire.endTransmission();           // Send the Tx buffer
+  Wire1.beginTransmission(address);  // Initialize the Tx buffer
+  Wire1.write(subAddress);           // Put slave register address in Tx buffer
+  Wire1.write(data);                 // Put data in Tx buffer
+  Wire1.endTransmission();           // Send the Tx buffer
 }
 
 uint8_t readByte(uint8_t address, uint8_t subAddress)
 {
   uint8_t data; // `data` will store the register data
-  Wire.beginTransmission(address);         // Initialize the Tx buffer
-  Wire.write(subAddress);                  // Put slave register address in Tx buffer
-  Wire.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
-//  Wire.endTransmission(false);             // Send the Tx buffer, but send a restart to keep connection alive
-//  Wire.requestFrom(address, 1);  // Read one byte from slave register address
-  Wire.requestFrom(address, (size_t) 1);   // Read one byte from slave register address
-  data = Wire.read();                      // Fill Rx buffer with result
+  Wire1.beginTransmission(address);         // Initialize the Tx buffer
+  Wire1.write(subAddress);                   // Put slave register address in Tx buffer
+  Wire1.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
+//  Wire1.endTransmission(false);             // Send the Tx buffer, but send a restart to keep connection alive
+//  Wire1.requestFrom(address, 1);  // Read one byte from slave register address
+  Wire1.requestFrom(address, (size_t) 1);   // Read one byte from slave register address
+  data = Wire1.read();                      // Fill Rx buffer with result
   return data;                             // Return data read from slave register
 }
 
 void readBytes(uint8_t address, uint8_t subAddress, uint8_t count, uint8_t * dest)
 {
-  Wire.beginTransmission(address);   // Initialize the Tx buffer
-  Wire.write(subAddress);            // Put slave register address in Tx buffer
-  Wire.endTransmission(I2C_NOSTOP);  // Send the Tx buffer, but send a restart to keep connection alive
-//  Wire.endTransmission(false);       // Send the Tx buffer, but send a restart to keep connection alive
+  Wire1.beginTransmission(address);   // Initialize the Tx buffer
+  Wire1.write(subAddress);            // Put slave register address in Tx buffer
+  Wire1.endTransmission(I2C_NOSTOP);  // Send the Tx buffer, but send a restart to keep connection alive
+//  Wire1.endTransmission(false);       // Send the Tx buffer, but send a restart to keep connection alive
   uint8_t i = 0;
-//        Wire.requestFrom(address, count);  // Read bytes from slave register address
-  Wire.requestFrom(address, (size_t) count);  // Read bytes from slave register address
-  while (Wire.available()) {
-    dest[i++] = Wire.read();
+//        Wire1.requestFrom(address, count);  // Read bytes from slave register address
+  Wire1.requestFrom(address, (size_t) count);  // Read bytes from slave register address
+  while (Wire1.available()) {
+    dest[i++] = Wire1.read();
   }         // Put read results in the Rx buffer
 }
-
